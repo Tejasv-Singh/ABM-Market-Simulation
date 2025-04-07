@@ -196,3 +196,123 @@ class StockMarket(Model):
         # Update stock price based on trades
         self.update_price()
 
+
+# Functions for analysis and visualization
+
+def run_market_simulation(steps=200, num_momentum=25, num_value=25, 
+                         num_noise=25, num_market_makers=5):
+    """Run a complete market simulation and return the model"""
+    model = StockMarket(num_momentum=num_momentum, 
+                        num_value=num_value, 
+                        num_noise=num_noise, 
+                        num_market_makers=num_market_makers)
+    
+    for i in range(steps):
+        model.step()
+    
+    return model
+
+def analyze_market_data(model):
+    """Analyze results from a market simulation"""
+    # Get model-level data
+    model_data = model.datacollector.get_model_vars_dataframe()
+    
+    # Get agent-level data
+    agent_data = model.datacollector.get_agent_vars_dataframe()
+    
+    # Calculate returns
+    model_data['Returns'] = model_data['Price'].pct_change()
+    
+    # Calculate volatility
+    volatility = model_data['Returns'].std() * np.sqrt(252)  # Annualized
+    
+    # Analyze by trader type
+    trader_types = {'momentum': [], 'value': [], 'noise': [], 'market_maker': []}
+    for agent in model.schedule.agents:
+        trader_types[agent.strategy].append(agent.unique_id)
+    
+    # Calculate performance by trader type
+    performance = {}
+    for strategy, agent_ids in trader_types.items():
+        if agent_ids:
+            # Get portfolio values for this strategy
+            strategy_data = agent_data.xs(agent_ids[0], level="AgentID")['PortfolioValue']
+            
+            # Calculate average final portfolio value for this strategy
+            performance[strategy] = sum(agent.portfolio_value[-1] 
+                                      for agent in model.schedule.agents 
+                                      if agent.strategy == strategy) / len(agent_ids)
+    
+    results = {
+        'final_price': model_data['Price'].iloc[-1],
+        'volatility': volatility,
+        'trading_volume': sum(model.volume_history),
+        'performance_by_type': performance
+    }
+    
+    return results, model_data, agent_data
+
+def plot_market_results(model_data):
+    """Plot key market metrics from simulation"""
+    plt.figure(figsize=(15, 10))
+    
+    # Price and fundamental value
+    plt.subplot(3, 1, 1)
+    plt.plot(model_data['Price'], label='Market Price')
+    plt.plot(model_data['FundamentalValue'], label='Fundamental Value', linestyle='--')
+    plt.title('Stock Price vs Fundamental Value')
+    plt.legend()
+    
+    # Trading volume
+    plt.subplot(3, 1, 2)
+    plt.bar(model_data.index, model_data['Volume'], alpha=0.7)
+    plt.title('Trading Volume')
+    
+    # Returns distribution
+    plt.subplot(3, 1, 3)
+    plt.hist(model_data['Returns'].dropna(), bins=30, alpha=0.7)
+    plt.title('Distribution of Returns')
+    
+    plt.tight_layout()
+    plt.show()
+
+def compare_trader_performance(model):
+    """Compare performance of different trader types"""
+    plt.figure(figsize=(10, 6))
+    
+    # Get a trader of each type
+    trader_samples = {}
+    for agent in model.schedule.agents:
+        if agent.strategy not in trader_samples:
+            trader_samples[agent.strategy] = agent
+    
+    # Plot portfolio values over time
+    for strategy, agent in trader_samples.items():
+        plt.plot(agent.portfolio_value, label=strategy)
+    
+    plt.title('Portfolio Value by Trader Type')
+    plt.xlabel('Steps')
+    plt.ylabel('Portfolio Value')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.show()
+
+# Example of running a simulation
+if __name__ == "__main__":
+    # Run simulation
+    market_model = run_market_simulation(steps=200)
+    
+    # Analyze results
+    results, model_data, agent_data = analyze_market_data(market_model)
+    
+    # Display summary
+    print("Final price:", results['final_price'])
+    print("Annualized volatility:", results['volatility'])
+    print("Total trading volume:", results['trading_volume'])
+    print("\nPerformance by trader type:")
+    for strategy, performance in results['performance_by_type'].items():
+        print(f"{strategy}: ${performance:.2f}")
+    
+    # Plot results
+    plot_market_results(model_data)
+    compare_trader_performance(market_model)
