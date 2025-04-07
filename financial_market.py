@@ -1,4 +1,7 @@
 import mesa
+from mesa import Agent, Model
+from mesa.model import RandomActivation  # It may have moved here
+from mesa.datacollection import DataCollector
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -81,11 +84,6 @@ class Trader(Agent):
             
         elif shares_to_trade < 0 and self.shares >= abs(shares_to_trade):  # Sell order
             self.shares += shares_to_trade  # Subtract shares[hadasaab@archlinux MESA-GSOC]$ cd ~/ABM-Market-Simulation
-cp -r financial-market-abm financial-market-abm-backup
-bash: cd: /home/hadasaab/ABM-Market-Simulation: No such file or directory
-cp: cannot stat 'financial-market-abm': No such file or directory
-[hadasaab@archlinux MESA-GSOC]$ AAA
-
 
             self.cash -= cost  # Add proceeds (cost is negative)
             self.trade_history.append({"step": self.model.schedule.steps, 
