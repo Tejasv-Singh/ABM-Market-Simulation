@@ -93,3 +93,106 @@ cp: cannot stat 'financial-market-abm': No such file or directory
                                       "shares": abs(shares_to_trade), 
                                       "price": price})
             self.model.order_book.append(shares_to_trade)  # Add to order book
+
+class StockMarket(Model):
+    """Model for a simple stock market with different types of traders"""
+    
+    def __init__(self, num_momentum=25, num_value=25, num_noise=25, num_market_makers=5, 
+                 initial_price=100, volatility=0.01, mean_reversion=0.005):
+        self.num_agents = num_momentum + num_value + num_noise + num_market_makers
+        self.schedule = RandomActivation(self)
+        self.price = initial_price
+        self.price_history = [initial_price]
+        self.fundamental_value = initial_price  # Initial fundamental value
+        self.volatility = volatility
+        self.mean_reversion = mean_reversion
+        self.order_book = []  # To track all orders
+        self.volume_history = []  # Trading volume by step
+        
+        # Create traders of different types
+        agent_id = 0
+        # Momentum traders
+        for i in range(num_momentum):
+            a = Trader(agent_id, self, "momentum")
+            self.schedule.add(a)
+            agent_id += 1
+            
+        # Value traders
+        for i in range(num_value):
+            a = Trader(agent_id, self, "value")
+            self.schedule.add(a)
+            agent_id += 1
+            
+        # Noise traders
+        for i in range(num_noise):
+            a = Trader(agent_id, self, "noise")
+            self.schedule.add(a)
+            agent_id += 1
+            
+        # Market makers
+        for i in range(num_market_makers):
+            a = Trader(agent_id, self, "market_maker")
+            self.schedule.add(a)
+            agent_id += 1
+        
+        # Add data collector
+        self.datacollector = DataCollector(
+            model_reporters={"Price": lambda m: m.price,
+                            "FundamentalValue": lambda m: m.fundamental_value,
+                            "Volume": lambda m: sum(abs(x) for x in m.order_book)},
+            agent_reporters={"Cash": lambda a: a.cash,
+                            "Shares": lambda a: a.shares,
+                            "PortfolioValue": lambda a: a.cash + a.shares * a.model.price}
+        )
+    
+    def update_price(self):
+        """Update stock price based on order imbalance and random noise"""
+        if not self.order_book:  # If no orders, add small random walk
+            price_change = np.random.normal(0, self.volatility * self.price)
+        else:
+            # Net order flow (positive: more buys, negative: more sells)
+            net_order_flow = sum(self.order_book)
+            
+            # Price impact from order imbalance
+            impact = 0.1 * net_order_flow / len(self.order_book)
+            
+            # Random noise component
+            noise = np.random.normal(0, self.volatility * self.price)
+            
+            # Mean reversion to fundamental value
+            reversion = self.mean_reversion * (self.fundamental_value - self.price)
+            
+            # Combined price change
+            price_change = impact + noise + reversion
+            
+        # Update price with constraints to prevent negative prices
+        self.price = max(0.1, self.price + price_change)
+        self.price_history.append(self.price)
+        
+        # Record volume
+        volume = sum(abs(x) for x in self.order_book)
+        self.volume_history.append(volume)
+        
+        # Clear order book for next step
+        self.order_book = []
+    
+    def update_fundamental_value(self):
+        """Occasionally update the fundamental value with random shocks"""
+        if random.random() < 0.05:  # 5% chance of news event
+            shock = np.random.normal(0, 5)  # Random news shock
+            self.fundamental_value = max(10, self.fundamental_value + shock)
+    
+    def step(self):
+        """Advance the model by one step"""
+        # Collect data before the step
+        self.datacollector.collect(self)
+        
+        # Execute all agent actions
+        self.schedule.step()
+        
+        # Update fundamental value
+        self.update_fundamental_value()
+        
+        # Update stock price based on trades
+        self.update_price()
+
