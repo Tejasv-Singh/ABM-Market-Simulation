@@ -15,6 +15,7 @@ class Trader(Agent):
         self.cash = 10000  # Start with $10,000
         self.shares = 100  # Start with 100 shares
         self.portfolio_value = []  # Track portfolio value over time
+        self.trade_history = []    # Track all trades
 
     def step(self):
         """Defines trader's action at each time step."""
@@ -32,6 +33,9 @@ class Trader(Agent):
             shares_to_trade = self.market_maker_strategy()
 
         self.place_order(shares_to_trade)  # Execute the trade
+        
+        # Update portfolio value
+        self.portfolio_value.append(self.cash + self.shares * self.model.price)
 
     def momentum_strategy(self):
         """Follows the trend: Buy when price rises, sell when it falls."""
@@ -64,9 +68,28 @@ class Trader(Agent):
         """Executes buy/sell order."""
         price = self.model.price
         cost = shares_to_trade * price
-        if shares_to_trade > 0 and self.cash >= cost:
+        
+        # Execute trade if valid
+        if shares_to_trade > 0 and self.cash >= cost:  # Buy order
             self.shares += shares_to_trade
             self.cash -= cost
-        elif shares_to_trade < 0 and self.shares >= abs(shares_to_trade):
-            self.shares += shares_to_trade
-            self.cash -= cost
+            self.trade_history.append({"step": self.model.schedule.steps, 
+                                      "action": "buy", 
+                                      "shares": shares_to_trade, 
+                                      "price": price})
+            self.model.order_book.append(shares_to_trade)  # Add to order book
+            
+        elif shares_to_trade < 0 and self.shares >= abs(shares_to_trade):  # Sell order
+            self.shares += shares_to_trade  # Subtract shares[hadasaab@archlinux MESA-GSOC]$ cd ~/ABM-Market-Simulation
+cp -r financial-market-abm financial-market-abm-backup
+bash: cd: /home/hadasaab/ABM-Market-Simulation: No such file or directory
+cp: cannot stat 'financial-market-abm': No such file or directory
+[hadasaab@archlinux MESA-GSOC]$ AAA
+
+
+            self.cash -= cost  # Add proceeds (cost is negative)
+            self.trade_history.append({"step": self.model.schedule.steps, 
+                                      "action": "sell", 
+                                      "shares": abs(shares_to_trade), 
+                                      "price": price})
+            self.model.order_book.append(shares_to_trade)  # Add to order book
